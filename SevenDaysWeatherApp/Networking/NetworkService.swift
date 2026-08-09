@@ -60,27 +60,94 @@ final class NetworkServiceImplementation: NetworkService {
         }
     }
     
-    func post<T, U>(_ request: T, to path: String) async throws -> U where T : Encodable, U : Decodable {
+    func post<T: Encodable, U: Decodable>(_ request: T, to path: String) async throws -> U  {
+        guard let url = URL(string: baseURL + path) else {
+            throw NetworkError.invalidURL(path: baseURL + path)
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        addAuthHeaders(to: &urlRequest)
+        urlRequest.httpBody = try encoder.encode(request)
+        return try await performRequest(urlRequest)
+    }
+    
+    func put<T: Encodable, U: Decodable>(_ request: T, to path: String) async throws -> U  {
+        guard let url = URL(string: baseURL + path) else {
+            throw NetworkError.invalidURL(path: baseURL + path)
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "PUT"
+        addAuthHeaders(to: &urlRequest)
+        urlRequest.httpBody = try encoder.encode(request)
+        return try await performRequest(urlRequest)
+    }
+    
+    func delete<U: Decodable>(_ path: String) async throws -> U {
         <#code#>
     }
     
-    func put<T, U>(_ request: T, to path: String) async throws -> U where T : Encodable, U : Decodable {
+    func get<U: Decodable>(_ path: String) async throws -> U {
         <#code#>
     }
     
-    func delete<U>(_ path: String) async throws -> U where U : Decodable {
+    func getWithRetry<U: Decodable>(_ path: String, retries: Int) async throws -> U {
         <#code#>
     }
     
-    func get<U>(_ path: String) async throws -> U where U : Decodable {
+    func postWithRetry<T: Encodable, U: Decodable>(_ request: T, to path: String, retries: Int) async throws -> U {
         <#code#>
     }
     
-    func getWithRetry<U>(_ path: String, retries: Int) async throws -> U where U : Decodable {
-        <#code#>
-    }
-    
-    func postWithRetry<T, U>(_ request: T, to path: String, retries: Int) async throws -> U where T : Encodable, U : Decodable {
-        <#code#>
+    private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+        do {
+            let (data, response) = try await session.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw NetworkError.invalidResponse
+            }
+            
+            switch httpResponse.statusCode {
+            case 200..<300:
+                do {
+                    return try decoder.decode(T.self, from: data)
+                } catch {
+                    throw NetworkError.decodingFailed(statusCode: httpResponse.statusCode, data: data)
+                }
+                
+            case 429:
+                let retryAfter = httpResponse.allHeaderFields["Retry-After"] as? String
+                let retryInterval = retryAfter.flatMap(TimeInterval.init)
+                throw NetworkError.rateLimited(retryAfter: retryInterval)
+                
+            case 401:
+                throw NetworkError.serverError(statusCode: 401, message: "Authentication required")
+                
+            case 404:
+                throw NetworkError.invalidURL(path: request.url?.absoluteString ?? "unknown")
+                
+            case 400...499:
+                throw NetworkError.serverError(statusCode: httpResponse.statusCode, message: "Client error")
+                
+            case 500...599:
+                throw NetworkError.serverError(statusCode: httpResponse.statusCode, message: "Server error")
+                
+            default:
+                throw NetworkError.serverError(statusCode: httpResponse.statusCode, message: "Unexpected status code")
+            }
+            
+        } catch let urlError as URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                throw NetworkError.noInternetConnection(underlyingError: urlError)
+            case .timedOut:
+                throw NetworkError.requestTimeout(underlyingError: urlError)
+            case .cancelled:
+                throw NetworkError.cancelled
+            default:
+                throw NetworkError.serverError(statusCode: urlError.errorCode, message: urlError.localizedDescription)
+            }
+        }
     }
 }
