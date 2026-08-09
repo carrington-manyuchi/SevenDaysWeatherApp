@@ -22,7 +22,6 @@ protocol NetworkService {
 
 
 final class NetworkServiceImplementation: NetworkService {
-    
     private let baseURL: String
     private let apiKey: String
     private let session: URLSessionProtocol
@@ -49,6 +48,10 @@ final class NetworkServiceImplementation: NetworkService {
         self.decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .iso8601
+        
+        self.encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.dateEncodingStrategy = .iso8601
     }
     
     private func addAuthHeaders(to request: inout URLRequest) {
@@ -85,19 +88,25 @@ final class NetworkServiceImplementation: NetworkService {
     }
     
     func delete<U: Decodable>(_ path: String) async throws -> U {
-        <#code#>
+        guard let url = URL(string: baseURL + path) else {
+            throw NetworkError.invalidURL(path: baseURL + path)
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "DELETE"
+        addAuthHeaders(to: &urlRequest)
+        return try await performRequest(urlRequest)
     }
     
     func get<U: Decodable>(_ path: String) async throws -> U {
-        <#code#>
-    }
-    
-    func getWithRetry<U: Decodable>(_ path: String, retries: Int) async throws -> U {
-        <#code#>
-    }
-    
-    func postWithRetry<T: Encodable, U: Decodable>(_ request: T, to path: String, retries: Int) async throws -> U {
-        <#code#>
+        guard let url = URL(string: baseURL + path) else {
+            throw NetworkError.invalidURL(path: baseURL + path)
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+        addAuthHeaders(to: &urlRequest)
+        return try await performRequest(urlRequest)
     }
     
     private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
@@ -149,5 +158,49 @@ final class NetworkServiceImplementation: NetworkService {
                 throw NetworkError.serverError(statusCode: urlError.errorCode, message: urlError.localizedDescription)
             }
         }
+    }
+    
+    func getWithRetry<U: Decodable>(_ path: String, retries: Int = 2) async throws -> U {
+        var lastError: Error?
+        
+        for attempt in 0...retries {
+            do {
+                return try await get(path)
+            } catch let error as NetworkError where error.isRetryable {
+                lastError = error
+                if attempt < retries {
+                    // Exponential backoff: 1s, 2s, 4s
+                    let delay = pow(2.0, Double(attempt))
+                    print("🔄 Retry \(attempt + 1)/\(retries) after \(delay)s delay")
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    continue
+                }
+            } catch {
+                throw error // Non-retryable error, throw immediately
+            }
+        }
+        
+        throw lastError ?? NetworkError.serverError(statusCode: 0, message: "Max retries exceeded")
+    }
+    
+    func postWithRetry<T: Encodable, U: Decodable>(_ request: T, to path: String, retries: Int = 2) async throws -> U {
+        var lastError: Error?
+        
+        for attempt in 0...retries {
+            do {
+                return try await post(request, to: path)
+            } catch let error as NetworkError where error.isRetryable {
+                lastError = error
+                if attempt < retries {
+                    let delay = pow(2.0, Double(attempt))
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    continue
+                }
+            } catch {
+                throw error
+            }
+        }
+        
+        throw lastError ?? NetworkError.serverError(statusCode: 0, message: "Max retries exceeded")
     }
 }
