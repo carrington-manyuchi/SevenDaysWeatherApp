@@ -7,7 +7,7 @@
 
 import SwiftUI
 import CoreLocation
-import Combine
+internal import Combine
 
 final class CityViewViewModels_V2: ObservableObject {
     @Published var weather = WeatherResponse.empty()
@@ -107,16 +107,16 @@ final class CityViewViewModels_V2: ObservableObject {
     }
     
     private func getWeatherInternal(city: String, for urlString: String) {
-        NetworkManager<WeatherResponse>.fetch(for: URL(string: urlString)!) { Result in
-            switch Result {
-            case .success(let response):
-                DispatchQueue.main.async {
-                    self.weather = response
-                }
-            case .failure(let error):
-                print(error)
-            }
-        }
+//        NetworkManager<WeatherResponse>.fetch(for: URL(string: urlString)!) { Result in
+//            switch Result {
+//            case .success(let response):
+//                DispatchQueue.main.async {
+//                    self.weather = response
+//                }
+//            case .failure(let error):
+//                print(error)
+//            }
+//        }
     }
     
 }
