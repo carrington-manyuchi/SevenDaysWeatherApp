@@ -10,7 +10,7 @@ import SwiftUI
 
 
 // MARK: - Repository Protocol
-protocol z {
+protocol NetworkServiceRepository {
     // Weather endpoints
     func fetchWeatherForecast(lat: Double, lon: Double) async throws -> WeatherResponse
     func fetchWeatherByCity(city: String) async throws -> WeatherResponse
