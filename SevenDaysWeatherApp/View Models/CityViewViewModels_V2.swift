@@ -5,31 +5,24 @@
 //  Created by Manyuchi, Carrington C on 2026/08/09.
 //
 
-import Foundation
 import SwiftUI
 import CoreLocation
-internal import Combine
+import Combine
 
-final class CityViewViewModel: ObservableObject {
+final class CityViewViewModels_V2: ObservableObject {
     @Published var weather = WeatherResponse.empty()
     
     @Published var city: String = "Mutare" {
         didSet {
-            Task {
-                await fetchWeather(for: city)
-            }
+            //MARK: - call get location here
+            getLocation()
         }
     }
     
-    // MARK: - Dependencies
-    private let repository: NetworkServiceRepository
-    private let geocoder = CLGeocoder()
-    
-    // MARK: - Formatters
     private lazy var dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .full
-        return formatter
+        let Formatter = DateFormatter()
+        Formatter.dateStyle = .full
+        return Formatter
     }()
     
     private lazy var dayFormatter: DateFormatter = {
@@ -44,17 +37,10 @@ final class CityViewViewModel: ObservableObject {
         return formatter
     }()
     
-    // MARK: - Initialization
-    init(repository: NetworkServiceRepository = NetworkServiceRepositoryImplementation(
-        networkService: NetworkServiceImplementation()
-    )) {
-        self.repository = repository
-        Task {
-            await fetchWeather(for: city)
-        }
+    init() {
+        getLocation()
     }
     
-    // MARK: - Computed Properties
     var date: String {
         return dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(weather.current.dt)))
     }
@@ -65,6 +51,7 @@ final class CityViewViewModel: ObservableObject {
         }
         return "sun.max.fill"
     }
+    
     
     var temperature: String {
         return getTemFor(temp: weather.current.temp)
@@ -89,41 +76,47 @@ final class CityViewViewModel: ObservableObject {
         return String(format: "%0.0f%%", weather.current.dew_point)
     }
     
-    // MARK: - Helper Methods
     func getTimeFor(timestamp: Int) -> String {
         return timeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
     }
     
     func getTemFor(temp: Double) -> String {
-        return String(format: "%0.1f", temp) // Fixed format specifier
+        return String(format: "%0..1f", temp)
     }
     
     func getDayFor(timestamp: Int) -> String {
         return dayFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
     }
     
-    // MARK: - Network Methods
-    
-    @MainActor
-    private func fetchWeather(for city: String) async {
-        do {
-            let response = try await repository.fetchWeatherByCity(city: city)
-            self.weather = response
-        } catch {
-            print("❌ Failed to fetch weather for \(city): \(error.localizedDescription)")
-            
-            // Fallback to default location if city not found
-            if let urlString = URL(string: API.getURLFor(lat: 37.5485, lon: -121.9886)) {
-                do {
-                    let fallbackResponse = try await repository.fetchWeatherForecast(
-                        lat: 37.5485,
-                        lon: -121.9886
-                    )
-                    self.weather = fallbackResponse
-                } catch {
-                    print("❌ Fallback weather fetch failed: \(error.localizedDescription)")
-                }
+    private func getLocation() {
+        CLGeocoder().geocodeAddressString(city) { placemarks, error in
+            if let places = placemarks, let place = places.first {
+                self.getWeather(cord: place.location?.coordinate)
             }
         }
     }
+    
+    private func getWeather(cord: CLLocationCoordinate2D?) {
+        if let cord = cord {
+            let urlString = API.getURLFor(lat: cord.latitude, lon: cord.longitude)
+            getWeatherInternal(city: city, for: urlString)
+        } else {
+            let urlString = API.getURLFor(lat: 37.5485, lon: -121.9886)
+            getWeatherInternal(city: city, for: urlString)
+        }
+    }
+    
+    private func getWeatherInternal(city: String, for urlString: String) {
+        NetworkManager<WeatherResponse>.fetch(for: URL(string: urlString)!) { Result in
+            switch Result {
+            case .success(let response):
+                DispatchQueue.main.async {
+                    self.weather = response
+                }
+            case .failure(let error):
+                print(error)
+            }
+        }
+    }
+    
 }
