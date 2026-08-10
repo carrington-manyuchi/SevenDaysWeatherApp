@@ -15,15 +15,7 @@ import Combine
 final class CityViewViewModel: ObservableObject {
     // MARK: - Published Properties
     @Published var weatherResponse: WeatherResponse?
-    @Published var city: String = "Mutare" {
-        didSet {
-            if !oldValue.isEmpty && oldValue != city {
-                Task {
-                    await fetchWeather(for: city)
-                }
-            }
-        }
-    }
+    @Published var city: String = "Mutare"
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var showError: Bool = false
@@ -38,14 +30,15 @@ final class CityViewViewModel: ObservableObject {
         
         return WeatherDisplay(
             date: Date(timeIntervalSince1970: TimeInterval(first.dt)),
-            temperature: first.main["temp"] ?? 0,
-            feelsLike: first.main["feels_like"] ?? 0,
+            temperature: first.main.temp,
+            feelsLike: first.main.feelsLike,
             condition: first.weather.first?.main ?? "",
             icon: first.weather.first?.icon ?? "01d",
-            humidity: Int(first.main["humidity"] ?? 0),
+            humidity: first.main.humidity,
             windSpeed: first.wind.speed,
-            pressure: Int(first.main["pressure"] ?? 0),
+            pressure: first.main.pressure,
             weatherDetails: first.weather,
+            pop: first.pop
         )
     }
     
@@ -55,7 +48,7 @@ final class CityViewViewModel: ObservableObject {
         return response.list.prefix(24).map { forecast in
             HourlyWeatherDisplay(
                 time: Date(timeIntervalSince1970: TimeInterval(forecast.dt)),
-                temperature: forecast.main["temp"] ?? 0,
+                temperature: forecast.main.temp,
                 icon: forecast.weather.first?.icon ?? "01d",
                 condition: forecast.weather.first?.main ?? ""
             )
@@ -74,8 +67,8 @@ final class CityViewViewModel: ObservableObject {
         return grouped.compactMap { (date, forecasts) in
             guard let first = forecasts.first else { return nil }
             
-            let minTemp = forecasts.min { ($0.main["temp_min"] ?? 0) < ($1.main["temp_min"] ?? 0) }?.main["temp_min"] ?? 0
-            let maxTemp = forecasts.max { ($0.main["temp_max"] ?? 0) < ($1.main["temp_max"] ?? 0) }?.main["temp_max"] ?? 0
+            let minTemp = forecasts.min { $0.main.tempMin < $1.main.tempMin }?.main.tempMin ?? 0
+            let maxTemp = forecasts.max { $0.main.tempMax < $1.main.tempMax }?.main.tempMax ?? 0
             
             return DailyWeatherDisplay(
                 date: date,
@@ -124,7 +117,7 @@ final class CityViewViewModel: ObservableObject {
     }
     
     var rainChancesDisplay: String {
-        return String(format: "%.0f%%", currentWeather.feelsLike)
+        return String(format: "%.0f%%", currentWeather.pop * 100)
     }
     
     // MARK: - Formatters
@@ -148,7 +141,6 @@ final class CityViewViewModel: ObservableObject {
     
     // MARK: - Dependencies
     private let repository: NetworkServiceRepository
-    private let geocoder = CLGeocoder()
     private var fetchTask: Task<Void, Never>?
     
     // MARK: - Initialization
@@ -172,6 +164,9 @@ final class CityViewViewModel: ObservableObject {
         let trimmedCity = newCity.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedCity.isEmpty else { return }
         city = trimmedCity
+        Task {
+            await fetchWeather(for: city)
+        }
     }
     
     func getTimeFor(timestamp: Int) -> String {
@@ -243,6 +238,7 @@ final class CityViewViewModel: ObservableObject {
                 self.weatherResponse = response
                 self.isLoading = false
                 print("✅ Successfully fetched weather for \(city)")
+                print("📊 Number of forecasts: \(response.list.count)")
                 
             } catch {
                 // Check if task was cancelled
@@ -332,4 +328,79 @@ final class CityViewViewModel: ObservableObject {
             }
         }
     }
+}
+
+
+//
+//  DisplayModels.swift
+//  SevenDaysWeatherApp
+//
+//  Created by Manyuchi, Carrington C on 2026/08/09.
+//
+
+import Foundation
+
+// MARK: - Weather Display Model
+struct WeatherDisplay {
+    let date: Date
+    let temperature: Double
+    let feelsLike: Double
+    let condition: String
+    let icon: String
+    let humidity: Int
+    let windSpeed: Double
+    let pressure: Int
+    let weatherDetails: [WeatherDetail]
+    let pop: Double
+    
+    static func empty() -> WeatherDisplay {
+        return WeatherDisplay(
+            date: Date(),
+            temperature: 0,
+            feelsLike: 0,
+            condition: "",
+            icon: "01d",
+            humidity: 0,
+            windSpeed: 0,
+            pressure: 0,
+            weatherDetails: [],
+            pop: 0
+        )
+    }
+}
+
+// MARK: - Hourly Weather Display
+struct HourlyWeatherDisplay {
+    let time: Date
+    let temperature: Double
+    let icon: String
+    let condition: String
+}
+
+// MARK: - Daily Weather Display
+struct DailyWeatherDisplay {
+    let date: Date
+    let minTemperature: Double
+    let maxTemperature: Double
+    let condition: String
+    let icon: String
+}
+
+// MARK: - Current Weather Display
+struct CurrentWeatherDisplay {
+    let cityName: String
+    let temperature: String
+    let condition: String
+    let icon: String
+    let highLow: String
+    let humidity: String
+    let windSpeed: String
+    let feelsLike: String
+}
+
+// MARK: - City Display Model
+struct CityDisplay {
+    let name: String
+    let country: String
+    let coordinates: (lat: Double, lon: Double)
 }

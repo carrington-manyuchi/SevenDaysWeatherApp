@@ -43,11 +43,11 @@ final class NetworkServiceImplementation: NetworkService {
         self.maxRetries = maxRetries
         
         self.decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+       // decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .secondsSince1970
         
         self.encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
+     //   encoder.keyEncodingStrategy = .convertToSnakeCase
         encoder.dateEncodingStrategy = .secondsSince1970
     }
     
@@ -94,8 +94,10 @@ final class NetworkServiceImplementation: NetworkService {
     
     // MARK: - Private Helpers
     private func buildRequest(path: String, method: String) throws -> URLRequest {
-        guard let url = URL(string: baseURL + path) else {
-            throw NetworkError.invalidURL(path: baseURL + path)
+        let urlString = path.hasPrefix("https") ? path : baseURL + path
+
+        guard let url = URL(string: urlString) else {
+                throw NetworkError.invalidURL(path: urlString)
         }
         
         var urlRequest = URLRequest(url: url)
@@ -122,7 +124,8 @@ final class NetworkServiceImplementation: NetworkService {
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw NetworkError.invalidResponse
             }
-            
+            print("📡 Response: \(httpResponse.statusCode)")
+            print("🔗 URL: \(request.url?.absoluteString ?? "unknown")") 
             print("📡 Response: \(httpResponse.statusCode)")
             
             // Print response data for debugging

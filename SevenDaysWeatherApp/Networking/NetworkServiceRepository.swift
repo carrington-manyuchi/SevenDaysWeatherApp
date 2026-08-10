@@ -59,19 +59,18 @@ final class NetworkServiceRepositoryImplementation: NetworkServiceRepository {
     // MARK: - Private Helpers
     
     private func geocodeCity(_ city: String) async throws -> (lat: Double, lon: Double) {
-        guard let encodedCity = city.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+        var components = URLComponents(string: "https://api.openweathermap.org/geo/1.0/direct")!
+        components.queryItems = [
+            URLQueryItem(name: "q", value: city),
+            URLQueryItem(name: "limit", value: "1"),
+            URLQueryItem(name: "appid", value: apiKey)
+        ]
+        
+        guard let fullURL = components.url?.absoluteString else {
             throw NetworkError.invalidURL(path: city)
         }
         
-        let path = buildWeatherPath(
-            endpoint: "geo/1.0/direct",
-            queryItems: [
-                "q": encodedCity,
-                "limit": "1"
-            ]
-        )
-        
-        let geoResponse: [GeoLocation] = try await networkService.get(path)
+        let geoResponse: [GeoLocation] = try await networkService.get(fullURL)
         
         guard let location = geoResponse.first else {
             throw NetworkError.cityNotFound
@@ -120,24 +119,3 @@ final class MockNetworkServiceRepository: NetworkServiceRepository {
     }
 }
 
-// MARK: - WeatherResponse Extension for Empty State
-extension WeatherResponse {
-    static func empty() -> WeatherResponse {
-        return WeatherResponse(
-            cod: "",
-            message: 0,
-            cnt: 0,
-            list: [],
-            city: City(
-                id: 0,
-                name: "",
-                coord: Coord(lat: 0, lon: 0),
-                country: "",
-                population: 0,
-                timezone: 0,
-                sunrise: 0,
-                sunset: 0
-            )
-        )
-    }
-}
