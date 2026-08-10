@@ -12,12 +12,14 @@ struct CityNameView: View {
     var date: String
     
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
+        VStack(spacing: 4) {
             Text(city)
                 .font(.title)
+                .fontWeight(.bold)
             
             Text(date)
-            
+                .font(.subheadline)
+                .opacity(0.8)
         }
         .foregroundStyle(.white)
     }
@@ -25,4 +27,5 @@ struct CityNameView: View {
 
 #Preview {
     CityNameView(city: "Harare", date: "11 August 2026")
+        .background(Color.blue)
 }

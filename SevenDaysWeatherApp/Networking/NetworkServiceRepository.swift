@@ -6,12 +6,9 @@
 //
 
 import Foundation
-import SwiftUI
-
 
 // MARK: - Repository Protocol
 protocol NetworkServiceRepository {
-    // Weather endpoints
     func fetchWeatherForecast(lat: Double, lon: Double) async throws -> WeatherResponse
     func fetchWeatherByCity(city: String) async throws -> WeatherResponse
 }
@@ -19,66 +16,128 @@ protocol NetworkServiceRepository {
 // MARK: - Repository Implementation
 final class NetworkServiceRepositoryImplementation: NetworkServiceRepository {
     private let networkService: NetworkService
-    private let apiKey = "8c200300740e9affe7daea59ed32b71"
+    private let apiKey: String
     
-    init(networkService: NetworkService) {
+    // MARK: - Initialization
+    init(
+        networkService: NetworkService = NetworkServiceImplementation(),
+        apiKey: String = "f8c200300740e9affe7daea59ed32b71"
+    ) {
         self.networkService = networkService
+        self.apiKey = apiKey
     }
     
-    // MARK: - Private Helpers
+    // MARK: - Public Methods
     
-    private func buildWeatherPath(endpoint: String, queryItems: [String: String]) -> String {
-        let baseQuery = "appid=\(apiKey)&units=metric"
-        let additionalQuery = queryItems.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
-        let fullQuery = additionalQuery.isEmpty ? baseQuery : "\(additionalQuery)&\(baseQuery)"
-        return "\(endpoint)?\(fullQuery)"
-    }
-    
-    // MARK: - Weather Endpoints
-    
-    /// Fetches weather data using coordinates (lat/lon)
+    /// Fetches weather forecast using coordinates
     /// - Parameters:
     ///   - lat: Latitude
     ///   - lon: Longitude
-    /// - Returns: WeatherResponse containing current, hourly, and daily weather
+    /// - Returns: WeatherResponse containing forecast data
     func fetchWeatherForecast(lat: Double, lon: Double) async throws -> WeatherResponse {
         let path = buildWeatherPath(
-            endpoint: "onecall",
+            endpoint: "forecast",
             queryItems: [
                 "lat": String(lat),
-                "lon": String(lon),
-                "exclude": "minutely,alerts" // Exclude minutely and alerts to keep response size manageable
+                "lon": String(lon)
             ]
         )
         return try await networkService.get(path)
     }
     
-    /// Fetches weather data by city name
-    /// - Parameter city: City name (e.g., "London", "New York")
-    /// - Returns: WeatherResponse containing current, hourly, and daily weather
+    /// Fetches weather by city name (geocodes first, then fetches forecast)
+    /// - Parameter city: City name (e.g., "Mutare", "London")
+    /// - Returns: WeatherResponse containing forecast data
     func fetchWeatherByCity(city: String) async throws -> WeatherResponse {
+        // Step 1: Geocode the city to get coordinates
+        let coordinates = try await geocodeCity(city)
+        
+        // Step 2: Fetch weather using the coordinates
+        return try await fetchWeatherForecast(lat: coordinates.lat, lon: coordinates.lon)
+    }
+    
+    // MARK: - Private Helpers
+    
+    private func geocodeCity(_ city: String) async throws -> (lat: Double, lon: Double) {
         guard let encodedCity = city.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
             throw NetworkError.invalidURL(path: city)
         }
         
-        // First get the coordinates for the city
-        let geoPath = "geo/1.0/direct?q=\(encodedCity)&limit=1&appid=\(apiKey)"
-        let geoResponse: [GeoLocation] = try await networkService.get(geoPath)
+        let path = buildWeatherPath(
+            endpoint: "geo/1.0/direct",
+            queryItems: [
+                "q": encodedCity,
+                "limit": "1"
+            ]
+        )
+        
+        let geoResponse: [GeoLocation] = try await networkService.get(path)
         
         guard let location = geoResponse.first else {
-            throw NetworkError.serverError(statusCode: 404, message: "City not found")
+            throw NetworkError.cityNotFound
         }
         
-        // Then fetch weather using the coordinates
-        return try await fetchWeatherForecast(lat: location.lat, lon: location.lon)
+        return (lat: location.lat, lon: location.lon)
+    }
+    
+    private func buildWeatherPath(endpoint: String, queryItems: [String: String]) -> String {
+        var components = URLComponents()
+        var items = [
+            URLQueryItem(name: "appid", value: apiKey),
+            URLQueryItem(name: "units", value: "metric")
+        ]
+        
+        for (key, value) in queryItems {
+            items.append(URLQueryItem(name: key, value: value))
+        }
+        
+        components.queryItems = items
+        let queryString = components.percentEncodedQuery ?? ""
+        return "\(endpoint)?\(queryString)"
     }
 }
 
-// MARK: - GeoLocation Model
-struct GeoLocation: Codable {
-    let name: String
-    let lat: Double
-    let lon: Double
-    let country: String
-    let state: String?
+// MARK: - Mock Repository for Testing
+final class MockNetworkServiceRepository: NetworkServiceRepository {
+    var shouldSucceed = true
+    var mockWeatherResponse: WeatherResponse?
+    var mockError: Error?
+    
+    func fetchWeatherForecast(lat: Double, lon: Double) async throws -> WeatherResponse {
+        if shouldSucceed {
+            return mockWeatherResponse ?? WeatherResponse.empty()
+        } else {
+            throw mockError ?? NetworkError.serverError(statusCode: 500, message: "Mock error")
+        }
+    }
+    
+    func fetchWeatherByCity(city: String) async throws -> WeatherResponse {
+        if shouldSucceed {
+            return mockWeatherResponse ?? WeatherResponse.empty()
+        } else {
+            throw mockError ?? NetworkError.cityNotFound
+        }
+    }
+}
+
+// MARK: - WeatherResponse Extension for Empty State
+extension WeatherResponse {
+    static func empty() -> WeatherResponse {
+        return WeatherResponse(
+            cod: "",
+            message: 0,
+            cnt: 0,
+            list: [],
+            city: City(
+                id: 0,
+                name: "",
+                coord: Coord(lat: 0, lon: 0),
+                country: "",
+                population: 0,
+                timezone: 0,
+                sunrise: 0,
+                sunset: 0
+            )
+        )
+    }
 }

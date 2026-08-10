@@ -8,68 +8,78 @@
 import SwiftUI
 
 struct TodayWeatherView: View {
-    
     @ObservedObject var cityVM: CityViewViewModel
     
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 15) {
             Text("Today")
                 .font(.largeTitle)
-                .bold()
+                .fontWeight(.bold)
             
-            HStack(spacing: 20) {
-                LottieView(name: cityVM.getLottieAnimationFor(icon: cityVM.weatherIcon))
-                    .background(.red)
+            HStack(spacing: 25) {
+                LottieView(name: cityVM.getLottieAnimationFor(icon: cityVM.currentWeather.icon))
                     .frame(width: 100, height: 100)
                 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("\(cityVM.temperature)℃")
-                        .font(.system(size: 42))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(cityVM.temperatureDisplay)
+                        .font(.system(size: 48, weight: .thin))
                     
-                    Text("\(cityVM.conditions)")
+                    Text(cityVM.conditionDisplay)
+                        .font(.title3)
+                        .opacity(0.8)
                 }
             }
             
-            HStack {
+            HStack(spacing: 20) {
                 Spacer()
-                widgetView(image: "wind", color: .green, title: "\(cityVM.windSpeed)km/hr")
+                widgetView(
+                    image: "wind",
+                    color: .green,
+                    title: cityVM.windSpeedDisplay
+                )
                 Spacer()
-                widgetView(image: "drop.fill", color: .blue, title: "\(cityVM.humidity)km/hr")
+                widgetView(
+                    image: "drop.fill",
+                    color: .blue,
+                    title: cityVM.humidityDisplay
+                )
                 Spacer()
-                widgetView(image: "umbrella.fill", color: .red, title: "\(cityVM.rainChances)km/hr")
+                widgetView(
+                    image: "umbrella.fill",
+                    color: .red,
+                    title: "\(String(format: "%.0f%%", cityVM.currentWeather.feelsLike))"
+                )
                 Spacer()
-            }            
+            }
         }
         .padding()
         .foregroundStyle(.white)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [.blue.opacity(0.5), .blue]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                ).opacity(0.5)
+            RoundedRectangle(cornerRadius: 15)
+                .fill(Color.blue.opacity(0.3))
+                .background(.ultraThinMaterial)
         )
         .shadow(color: .white.opacity(0.1), radius: 2, x: -2, y: -2)
         .shadow(color: .black.opacity(0.2), radius: 2, x: 2, y: 2)
     }
     
     private func widgetView(image: String, color: Color, title: String) -> some View {
-        VStack {
+        VStack(spacing: 8) {
             Image(systemName: image)
-                .padding()
-                .font(.title)
+                .font(.title2)
                 .foregroundColor(color)
-                .background(RoundedRectangle(cornerRadius: 10).fill(.white))
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(.white.opacity(0.2)))
             
             Text(title)
-            
+                .font(.caption)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
     }
 }
 
 #Preview {
     TodayWeatherView(cityVM: CityViewViewModel())
+        .background(Color.blue)
 }
