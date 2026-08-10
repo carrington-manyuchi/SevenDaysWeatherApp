@@ -67,7 +67,7 @@ final class CityViewViewModel: ObservableObject {
     }
     
     var temperature: String {
-        return getTemFor(temp: weather.current.temp)
+        return getTempFor(temp: weather.current.temp)
     }
     
     var conditions: String {
@@ -85,7 +85,7 @@ final class CityViewViewModel: ObservableObject {
         return String(format: "%d%%", weather.current.humidity)
     }
     
-    var rainfChances: String {
+    var rainChances: String {
         return String(format: "%0.0f%%", weather.current.dew_point)
     }
     
@@ -94,7 +94,7 @@ final class CityViewViewModel: ObservableObject {
         return timeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
     }
     
-    func getTemFor(temp: Double) -> String {
+    func getTempFor(temp: Double) -> String {
         return String(format: "%0.1f", temp) // Fixed format specifier
     }
     
